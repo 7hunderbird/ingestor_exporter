@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -e
+
+pipeline_dir=$(dirname $(greadlink -f $0))
+echo $pipeline_dir
+tmp_dir=$(mktemp -d)
+cleanup() {
+    rm -rf $tmp_dir
+}
+trap "cleanup" QUIT TERM EXIT INT
+
+
+if [ "$#" -ne 0 ]; then
+  echo "Usage $0"
+  exit 1
+fi
+
+if ! type gsort >/dev/null 2>&1; then
+  echo "Sorry, you need gsort to run repipe now, please brew install coreutils"
+  exit 1
+fi
+
+DESIRED_SPRUCE_VERSION="1.19.1"
+echo "${DESIRED_SPRUCE_VERSION}" > $tmp_dir/spruce_versions
+spruce -v | awk '{print $4}' >> $tmp_dir/spruce_versions 2>&1
+if [[ ! $(gsort -V $tmp_dir/spruce_versions | head -1) == "${DESIRED_SPRUCE_VERSION}" ]]; then
+  echo "Spruce must be at least v${DESIRED_SPRUCE_VERSION} for repipe to function properly. Please brew upgrade it"
+  exit 1
+fi
+
+target=$(spruce merge --cherry-pick meta.concourse.target $pipeline_dir/settings.yml | spruce json | jq -r .meta.concourse.target)
+if [[ -z $target || $target == "null" ]]; then
+  echo "Could not find $.meta.concourse.target defined in $pipeline_dir/settings.yml"
+  exit 1
+fi
+TEAM=$(spruce merge --cherry-pick meta.concourse.team $pipeline_dir/settings.yml | spruce json | jq -r .meta.concourse.team)
+if [[ -z $TEAM || $TEAM == "null" ]]; then
+  echo "Could not find $.meta.concourse.team defined in $pipeline_dir/settings.yml"
+  exit 1
+fi
+
+if ! fly -t $target status; then 
+  echo Please log into concourse in order to update the pipeline...
+  fly -t $target login -k -n $TEAM
+elif [[ $(spruce json ~/.flyrc | jq -r '.targets["'$target'"].team') != "$TEAM" ]]; then
+  echo Please log into concourse in order to update the pipeline...
+  fly -t $target login -k -n $TEAM
+fi
+
+approle_id=$(concourse-app-role-id)
+approle_secret=$(concourse-app-role-secret)
+cat > $tmp_dir/vault.yml << EOF
+---
+meta:
+  travel-agent:
+    app-role-id: ${approle_id}
+    app-role-secret: ${approle_secret}
+EOF
+
+if [[ -f $pipeline_dir/pipeline.ego ]]; then
+  # pre-merge settings.yml to only grab vault secrets once, since there are likely to be secrets for envs
+  spruce merge "$pipeline_dir/settings.yml" > "$tmp_dir/settings.yml"
+
+  # build travel-agent.yml based on meta.envs[] and name
+  spruce merge --cherry-pick name --cherry-pick meta.envs --cherry-pick resources "$tmp_dir/settings.yml" | spruce json | jq '{name, envs: .meta.envs, resources}' | spruce merge > "$tmp_dir/travel-agent.yml"
+  echo -n "Rendering ego file..."
+  render-ego "$pipeline_dir/pipeline.ego" "$tmp_dir/travel-agent.yml" > "$tmp_dir/pipeline.yml"
+  echo "done"
+elif [[ -f "$pipeline_dir/pipeline.yml" ]]; then
+  cp "$pipeline_dir/settings.yml" "$tmp_dir/settings.yml"
+  cp "$pipeline_dir/pipeline.yml" "$tmp_dir/pipeline.yml"
+fi
+
+# merge rendered yml with settings + vault
+echo -n "Merging pipeline.yml with settings.yml and vault.yml..."
+spruce merge --prune meta "$tmp_dir/pipeline.yml" "$tmp_dir/settings.yml" "$tmp_dir/vault.yml" > "$tmp_dir/pipeline-final.yml"
+echo "done"
+
+PIPELINE_NAME=$(spruce merge --cherry-pick meta.pipeline $tmp_dir/pipeline.yml $tmp_dir/settings.yml | spruce json | jq -r '.meta.pipeline')
+if [[ -z $PIPELINE_NAME || $PIPELINE_NAME == "null" ]]; then
+  echo "Could not find the pipeline name $.meta.pipeline defined in $pipeline_dir/settings.yml"
+  exit 1
+fi
+
+# fly set-pipeline
+echo "Updating concourse pipeline definitions via fly..."
+fly -t "$target" set-pipeline -p "$PIPELINE_NAME" -c "$tmp_dir/pipeline-final.yml"
+fly -t "$target" expose-pipeline -p "$PIPELINE_NAME"
+fly -t "$target" unpause-pipeline -p "$PIPELINE_NAME"
+
+echo "Finished"

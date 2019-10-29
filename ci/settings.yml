@@ -1,0 +1,11 @@
+---
+name: ingestor-exporter
+
+meta:
+  concourse:
+    target: concourse
+    team:   main
+
+  github:
+    owner: bosh-prometheus
+    repo:  ingestor_exporter
