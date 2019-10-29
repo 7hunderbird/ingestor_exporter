@@ -86,10 +86,10 @@ func prometheusTagsToString(tagsMap map[string]string) string {
 
 func exporterPropertiesToTagsMap(props Properties) map[string]string {
 	tagsMap := map[string]string{
-		"environment": props.IngestorMetricsEnvironment,
+		"environment":       props.IngestorMetricsEnvironment,
 		"ingestor_hostname": props.IngestorHostname,
-		"ingestor_path": props.IngestorPath,
-		"ingestor_port": strconv.Itoa(props.IngestorPort),
+		"ingestor_path":     props.IngestorPath,
+		"ingestor_port":     strconv.Itoa(props.IngestorPort),
 		"ingestor_protocol": props.IngestorProtocol,
 	}
 
@@ -146,7 +146,8 @@ var _ = Describe("ingestor exporter", func() {
 		s2 := strings.Split(portWithHostnameValue, ":")
 		hostnameValue, portValue := s2[0], s2[1]
 
-		portValue2, _ := strconv.Atoi(portValue)
+		portValue2, err := strconv.Atoi(portValue)
+		Expect(err).To(BeNil())
 
 		propertiesStruct := Properties{
 			IngestorProtocol:                protocolValue,
@@ -156,7 +157,7 @@ var _ = Describe("ingestor exporter", func() {
 			IngestorSkipSsl:                 true,
 			IngestorResponseTimeoutSeconds:  1,
 			IngestorExporterMetricsEndpoint: "/metrics",
-			IngestorMetricsEnvironment:		 "dev",
+			IngestorMetricsEnvironment:      "dev",
 		}
 
 		req := httptest.NewRequest("GET", "http://myingestorexporter.com/metrics", nil) //URL of this request does not matter
@@ -221,7 +222,8 @@ var _ = Describe("ingestor exporter", func() {
 		s2 := strings.Split(portWithHostnameValue, ":")
 		hostnameValue, portValue := s2[0], s2[1]
 
-		portValue2, _ := strconv.Atoi(portValue)
+		portValue2, err := strconv.Atoi(portValue)
+		Expect(err).To(BeNil())
 
 		propertiesStruct := Properties{
 			IngestorProtocol:                protocolValue,
@@ -291,7 +293,8 @@ var _ = Describe("ingestor exporter", func() {
 		s2 := strings.Split(portWithHostnameValue, ":")
 		hostnameValue, portValue := s2[0], s2[1]
 
-		portValue2, _ := strconv.Atoi(portValue)
+		portValue2, err := strconv.Atoi(portValue)
+		Expect(err).To(BeNil())
 
 		propertiesStruct := Properties{
 			IngestorProtocol:                protocolValue,
@@ -339,7 +342,8 @@ var _ = Describe("ingestor exporter", func() {
 		s2 := strings.Split(portWithHostnameValue, ":")
 		hostnameValue, portValue := s2[0], s2[1]
 
-		portValue2, _ := strconv.Atoi(portValue)
+		portValue2, err := strconv.Atoi(portValue)
+		Expect(err).To(BeNil())
 
 		propertiesStruct := Properties{
 			IngestorProtocol:                protocolValue,
@@ -415,7 +419,8 @@ var _ = Describe("ingestor exporter", func() {
 		s1 := strings.Split(host, ":")
 		hostnameString, portString := s1[0], s1[1]
 
-		portStringConv, _ := strconv.Atoi(portString)
+		portStringConv, err := strconv.Atoi(portString)
+		Expect(err).To(BeNil())
 
 		propertiesStruct := Properties{
 			IngestorProtocol:                scheme,
@@ -451,7 +456,7 @@ var _ = Describe("properties", func() {
 		Expect(props.IngestorSkipSsl).To(Equal(false))
 		Expect(props.IngestorResponseTimeoutSeconds).To(Equal(10))
 		Expect(props.IngestorExporterMetricsEndpoint).To(Equal("/metrics"))
-		Expect(props.IngestorExporterPort).To(Equal(9184))
+		Expect(props.IngestorExporterPort).To(Equal(9495))
 	})
 
 	It("gets values from environment variables", func() {

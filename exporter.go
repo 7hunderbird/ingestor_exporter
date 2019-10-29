@@ -10,12 +10,13 @@ import (
 	"sync"
 	"time"
 
+	"net/http"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
 	"github.com/voxelbrain/goptions"
-	"net/http"
 )
 
 //TODO remove the prometheus log output when running tests
@@ -83,8 +84,8 @@ type Exporter struct {
 }
 
 type Options struct {
-	Version bool `goptions:"-v, --version, description='Show the version'"`
-	Help goptions.Help `goptions:"-h, --help, description='Show this help'"`
+	Version bool          `goptions:"-v, --version, description='Show the version'"`
+	Help    goptions.Help `goptions:"-h, --help, description='Show this help'"`
 }
 
 var Version = "(development)"
@@ -103,7 +104,7 @@ func NewProperties() Properties {
 		IngestorSkipSsl:                 false,
 		IngestorResponseTimeoutSeconds:  10,
 		IngestorExporterMetricsEndpoint: "/metrics",
-		IngestorExporterPort:            9184,
+		IngestorExporterPort:            9495,
 		IngestorMetricsEnvironment:      "",
 	}
 
@@ -193,9 +194,6 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.ignored
 }
 
-// Collect fetches the stats from configured location and delivers them
-// as Prometheus metrics.
-// It implements prometheus.Collector.
 func (e *Exporter) collect(ch chan<- prometheus.Metric) error {
 	timeout := time.Duration(e.Properties.IngestorResponseTimeoutSeconds) * time.Second
 	client := http.Client{
@@ -291,7 +289,7 @@ func (e *Exporter) collect(ch chan<- prometheus.Metric) error {
 	return nil
 }
 
-// Collect fetches the stats from configured fluentd location and delivers them
+// Collect fetches the stats from configured ingestor location and delivers them
 // as Prometheus metrics.
 // It implements prometheus.Collector.
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
@@ -309,7 +307,7 @@ func NewExporter(properties Properties) *Exporter {
 		"ingestor_hostname": properties.IngestorHostname,
 		"ingestor_port":     strconv.Itoa(properties.IngestorPort),
 		"ingestor_path":     properties.IngestorPath,
-		"environment":		 properties.IngestorMetricsEnvironment,
+		"environment":       properties.IngestorMetricsEnvironment,
 	}
 
 	return &Exporter{
@@ -324,82 +322,82 @@ func NewExporter(properties Properties) *Exporter {
 			"Is ingestor giving successful status codes",
 			nil,
 			constLabels),
-		consume: prometheus.NewDesc( //probably a counter, rename the metric to consume_total
+		consume: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "consume_total"),
 			"Messages received",
 			nil,
 			constLabels),
-		consumeFail: prometheus.NewDesc( //counter
+		consumeFail: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "consume_fail_total"),
 			"Messages failed to be consumed",
 			nil,
 			constLabels),
-		consumeHttpStartStop: prometheus.NewDesc( //counter
+		consumeHttpStartStop: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "consume_http_start_stop_total"),
 			"HttpStartStop messages received",
 			nil,
 			constLabels),
-		consumeValueMetric: prometheus.NewDesc( //counter
+		consumeValueMetric: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "consume_value_metric_total"),
 			"ValueMetric messages received",
 			nil,
 			constLabels),
-		consumeCounterEvent: prometheus.NewDesc( //counter
+		consumeCounterEvent: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "consume_counter_event_total"),
 			"CounterEvent messages received",
 			nil,
 			constLabels),
-		consumeLogMessage: prometheus.NewDesc( //counter
+		consumeLogMessage: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "consume_log_message_total"),
 			"Log messages received",
 			nil,
 			constLabels),
-		consumeError: prometheus.NewDesc( //counter
+		consumeError: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "consume_error_total"),
 			"Error messages received",
 			nil,
 			constLabels),
-		consumeContainerMetric: prometheus.NewDesc( //counter
+		consumeContainerMetric: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "consume_container_metric_total"),
 			"ContainerMetric messages received",
 			nil,
 			constLabels),
-		consumeUnknown: prometheus.NewDesc( //counter
+		consumeUnknown: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "consume_unknown_total"),
 			"Unknown type messages received",
 			nil,
 			constLabels),
-		ignored: prometheus.NewDesc( //counter
+		ignored: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "ignored_total"),
 			"Messages dropped due to no forwarding rule",
 			nil,
 			constLabels),
-		forwarded: prometheus.NewDesc( //counter
+		forwarded: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "forwarded_total"),
 			"Messages enqueued to be sent to syslog endpoint",
 			nil,
 			constLabels),
-		publish: prometheus.NewDesc( //counter
+		publish: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "publish_total"),
 			"Messages succesfully sent to syslog endpoint",
 			nil,
 			constLabels),
-		publishFail: prometheus.NewDesc( //counter
+		publishFail: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "publish_fail_total"),
 			"Messages that couldn't be sent to syslog endpoint",
 			nil,
 			constLabels),
-		slowConsumerAlert: prometheus.NewDesc( //counter
+		slowConsumerAlert: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "slow_consumer_alert_total"),
 			"Slow consumer alerts emitted by noaa",
 			nil,
 			constLabels),
-		subinuptBuffer: prometheus.NewDesc( //gauge
+		subinuptBuffer: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "subinupt_buffer"),
 			"Messages in buffer",
 			nil,
 			constLabels),
-		instanceID: prometheus.NewDesc( //gauge
+		instanceID: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "instance_id"),
 			"ID for nozzle instance. This is used to identify stats from different instances",
 			nil,
