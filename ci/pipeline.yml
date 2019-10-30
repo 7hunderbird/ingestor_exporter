@@ -1,0 +1,352 @@
+---
+# DO NOT MAKE CHANGES TO THIS FILE.  Instead, modify
+# ci/settings.yml and override what needs overridden.
+# This uses spruce, so you have some options there.
+
+name:     (( param "Please name your pipeline" ))
+meta:
+  release:  (( concat .name " Release" ))
+  pipeline: (( grab .name ))
+
+  git:
+    email: ci@localhost
+    name:  CI Bot
+
+  go:
+    version: 1.11
+    module:  (( concat meta.github.hostname "/" meta.github.owner "/" meta.github.repo ))
+    cmd_module: (( grab meta.go.module ))
+    binary:  (( grab meta.github.repo ))
+    force_static_binary: false
+
+  image:
+    name: (( vault "secret/" meta.github.hostname "/" meta.github.owner "/" meta.github.repo "/docker/go-build:registry-url" ))
+    tag: (( grab meta.go.version ))
+
+  github:
+    uri:          (( concat "git@" meta.github.hostname ":" meta.github.owner "/" meta.github.repo ))
+    hostname:     github.com
+    owner:        (( param "Please specify the name of the user / organization that owns the Github repository" ))
+    repo:         (( param "Please specify the name of the Github repository" ))
+    branch:       master
+    private_key:  (( vault "secret/" meta.github.hostname "/" meta.github.owner "/" meta.github.repo "/deployment_keys/ci:private" ))
+    access_token: (( vault "secret/" meta.github.hostname "/" meta.github.owner "/" meta.github.repo "/user:access_token" ))
+    api_url:      https://github.com/api/v3/
+    uploads_url:  https://github.com/api/uploads/
+
+  teams_webhook: (( vault "secret/" meta.github.hostname "/" meta.github.owner "/" meta.github.repo "/webhooks:msteams" ))
+
+  notification_resource:
+    on_error_params:
+      message: |
+        "{
+          \"@type\": \"MessageCard\",
+          \"@context\": \"http://schema.org/extensions\",
+          \"summary\": \"$BUILD_PIPELINE_NAME\",
+          \"themeColor\": \"FF0000\",
+          \"title\": \"$BUILD_PIPELINE_NAME failed in $BUILD_JOB_NAME\",
+          \"sections\": [
+            {
+              \"text\": \"$BUILD_PIPELINE_NAME on $BUILD_JOB_NAME failed!\",
+              \"facts\": [
+                { \"name\": \"Team:\", \"value\": \"$BUILD_TEAM_NAME\" },
+                { \"name\": \"Pipeline Name:\", \"value\": \"$BUILD_PIPELINE_NAME\" },
+                { \"name\": \"Job Name:\", \"value\": \"$BUILD_JOB_NAME\" },
+                { \"name\": \"Build:\", \"value\": \"$BUILD_NAME\" },
+                { \"name\": \"Link:\", \"value\": \"[$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME)\"
+              ]
+            },
+            {
+              \"activitySubtitle\": \"Pipeline Failure :(\"
+            }
+          ]
+        }"
+    on_success_params:
+      message: |
+        "{
+          \"@type\": \"MessageCard\",
+          \"@context\": \"http://schema.org/extensions\",
+          \"summary\": \"$BUILD_PIPELINE_NAME\",
+          \"themeColor\": \"00FF00\",
+          \"title\": \"$BUILD_PIPELINE_NAME successfully applied in $BUILD_JOB_NAME\",
+          \"sections\": [
+            {
+              \"text\": \"$BUILD_PIPELINE_NAME on $BUILD_JOB_NAME succeeded!\",
+              \"facts\": [
+                { \"name\": \"Team:\", \"value\": \"$BUILD_TEAM_NAME\" },
+                { \"name\": \"Pipeline Name:\", \"value\": \"$BUILD_PIPELINE_NAME\" },
+                { \"name\": \"Job Name:\", \"value\": \"$BUILD_JOB_NAME\" },
+                { \"name\": \"Build:\", \"value\": \"$BUILD_NAME\" },
+                { \"name\": \"Link:\", \"value\": \"[$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME)\"
+              ]
+            },
+            {
+              \"activitySubtitle\": \"Pipeline Success :D\"
+            }
+          ]
+        }"
+
+  concourse:
+    target:   (( param "What Concourse target should this pipeline be placed on?" ))
+    team:     (( param "What Concourse team should this pipeline be placed under?" ))
+
+groups:
+  - name: (( grab meta.pipeline ))
+    jobs:
+      - test
+      - test-pr
+      - rc
+      - shipit
+      - major
+      - minor
+      - bump-patch
+
+jobs:
+  - name: test
+    public: true
+    serial: true
+    plan:
+      - do:
+        - { get: git, trigger: true }
+        - task: test
+          config:
+            platform: linux
+            image_resource:
+              type: docker-image
+              source:
+                repository: (( grab meta.image.name ))
+                tag:        (( grab meta.image.tag ))
+            inputs:
+              - name: git
+                path: (( concat "gopath/src/" meta.go.module ))
+            run:
+              path: (( concat "./gopath/src/" meta.go.module "/ci/scripts/test" ))
+              args: []
+            params:
+              MODULE: (( grab meta.go.module ))
+        on_failure:
+          put: notify
+          params: (( grab meta.notification_resource.on_error_params ))
+
+  - name: test-pr
+    public: true
+    serial: true
+    plan:
+      - do:
+        - { get: git-pull-requests, trigger: true, version: every }
+        - put: git-pull-requests
+          params:
+            path: git-pull-requests
+            status: pending
+        - task: test
+          config:
+            platform: linux
+            image_resource:
+              type: docker-image
+              source:
+                repository: (( grab meta.image.name ))
+                tag:        (( grab meta.image.tag ))
+            inputs:
+              - name: git-pull-requests
+                path: (( concat "gopath/src/" meta.go.module ))
+            run:
+              path: (( concat "./gopath/src/" meta.go.module "/ci/scripts/test" ))
+              args: []
+            params:
+              MODULE: (( grab meta.go.module ))
+          on_success:
+            put: git-pull-requests
+            params:
+              path: git-pull-requests
+              status: success
+          on_failure:
+            put: git-pull-requests
+            params:
+              path: git-pull-requests
+              status: failure
+        - task: pr-success-message
+          config:
+            platform: linux
+            image_resource:
+              type: docker-image
+              source:
+                repository: (( grab meta.image.name ))
+                tag:        (( grab meta.image.tag ))
+            inputs:
+              - { name: git-pull-requests }
+            outputs:
+              - { name: message }
+            run:
+              path: sh
+              args:
+              - -ce
+              - |
+                cd git-pull-requests
+                pr_url=$(git config --get pullrequest.url)
+                cd -
+                echo "<${pr_url}|Pull request passed test> Merge when ready: ${pr_url}" > message/body
+        on_failure:
+          put: notify
+          params: (( grab meta.notification_resource.on_error_params ))
+
+  - name: rc
+    public: true
+    plan:
+      - do:
+        - aggregate:
+            - { get: git,     trigger: true,  passed: [test] }
+            - { get: version, trigger: true, params: {pre: rc} }
+        - put: version
+          params: {file: version/number}
+        on_failure:
+          put: notify
+          params: (( grab meta.notification_resource.on_error_params ))
+
+  - name: bump-patch
+    public: true
+    plan:
+      - do:
+        - { get: version, trigger: true, params: { bump: patch, pre: rc }, passed: [shipit] } # bump rc + patch, so that subesquent version bumps can trigger a new bump-patch
+        - { put: version,                params: { file: version/number} }
+        on_failure:
+          put: notify
+          params: (( grab meta.notification_resource.on_error_params ))
+
+  - name: minor
+    public: true
+    plan:
+      - do:
+        - { get: version, trigger: false, params: {bump: minor} }
+        - { put: version,                 params: {file: version/number} }
+        on_failure:
+          put: notify
+          params: (( grab meta.notification_resource.on_error_params ))
+
+  - name: major
+    public: true
+    plan:
+      - do:
+        - { get: version, trigger: false, params: {bump: major} }
+        - { put: version,                 params: {file: version/number} }
+        on_failure:
+          put: notify
+          params: (( grab meta.notification_resource.on_error_params ))
+
+  - name: shipit
+    public: true
+    serial: true
+    plan:
+      - do:
+        - name: inputs
+          aggregate:
+            - { get: version, passed: [rc], params: {bump: final} }
+            - { get: git,     passed: [rc] }
+        - name: release
+          task: release
+          config:
+            image_resource:
+              type: docker-image
+              source:
+                repository: (( grab meta.image.name ))
+                tag:        (( grab meta.image.tag ))
+            platform: linux
+            inputs:
+              - name: version
+              - name: git
+                path: (( concat "gopath/src/" meta.go.module ))
+            outputs:
+              - name: gh
+              - name: pushme
+            run:
+              path: (( concat "./gopath/src/" meta.go.module "/ci/scripts/shipit" ))
+              args: []
+            params:
+              BINARY:       (( grab meta.go.binary ))
+              REPO_ROOT:    (( concat "gopath/src/" meta.go.module ))
+              VERSION_FROM: version/number
+              RELEASE_NAME: (( grab meta.release ))
+              RELEASE_ROOT: gh
+              REPO_OUT:     pushme
+              BRANCH:       (( grab meta.github.branch ))
+              CMD_PKG:      (( grab meta.go.cmd_module ))
+              STATIC_BINARY:  (( grab meta.go.force_static_binary ))
+              GIT_EMAIL:      (( grab meta.git.email ))
+              GIT_NAME:       (( grab meta.git.name ))
+        - name: version
+          put: version
+          params: { bump: final }
+        - name: git
+          put: git
+          params:
+            rebase: true
+            repository: pushme/git
+        - name: github
+          put: github
+          params:
+            name:   gh/name
+            tag:    gh/tag
+            body:   gh/notes.md
+            globs: [gh/artifacts/*]
+        - name: notify
+          aggregate:
+          - put: notify
+          params: (( grab meta.notification_resource.on_success_params ))
+        on_failure:
+          put: notify
+          params: (( grab meta.notification_resource.on_error_params ))
+
+resource_types:
+  - name: teams-notification
+    type: docker-image
+    source:
+      repository: (( vault "secret/" meta.github.hostname "/" meta.github.owner "/" meta.github.repo "/docker/msteams-notification:registry-url" ))
+      tags:       latest
+
+  - name: pull-request
+    type: docker-image
+    source:
+      repository: (( vault "secret/" meta.github.hostname "/" meta.github.owner "/" meta.github.repo "/docker/pull-request:registry-url" ))
+
+resources:
+  - name: git
+    type: git
+    source:
+      uri:         (( grab meta.github.uri ))
+      branch:      (( grab meta.github.branch ))
+      private_key: (( grab meta.github.private_key ))
+      ignore_paths:
+      - ci/versions
+
+  - name: version
+    type: semver
+    source:
+      driver: git
+      uri: (( grab meta.github.uri ))
+      file: (( concat "ci/versions/" meta.go.binary "-version" ))
+      initial_version: 0.0.1
+      private_key: (( grab meta.github.private_key ))
+      branch: (( grab meta.github.branch ))
+      git_user: "CI Bot <ci@localhost>"
+
+  - name: notify
+    type: teams-notification
+    source:
+      url: (( grab meta.teams_webhook ))
+
+  - name: github
+    type: github-release
+    source:
+      access_token: (( grab meta.github.access_token ))
+      owner: (( grab meta.github.owner ))
+      repository:  (( grab meta.github.repo ))
+      github_api_url: (( grab meta.github.api_url ))
+      github_uploads_url: (( grab meta.github.uploads_url ))
+
+  - name: git-pull-requests
+    type: pull-request
+    source:
+      access_token: (( grab meta.github.access_token ))
+      private_key:  (( grab meta.github.private_key ))
+      repo:         (( concat meta.github.owner "/" meta.github.repo ))
+      base:         (( grab meta.github.branch ))
+      api_endpoint: (( grab meta.github.api_url ))
