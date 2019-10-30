@@ -26,7 +26,7 @@ $ ingestor_exporter <flags>
 
 ### BOSH
 
-This exporter can be deployed using the [Prometheus BOSH Release][prometheus-boshrelease].
+*It is is intended for this exporter to be able to be* deployed using the [Prometheus BOSH Release][prometheus-boshrelease]. Some work still needs to be done around this.
 
 ## Usage
 
