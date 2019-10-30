@@ -78,10 +78,10 @@ We welcome any contributions. For any proposed changes, please fork the project 
 
 ## License
 
-Apache License 2.0, see [LICENSE][license].
+BSD 3, see [LICENSE][license].
 
 [binaries]: https://github.com/bosh-prometheus/ingestor_exporter/releases
 [cloudfoundry]: https://www.cloudfoundry.org/
 [golang]: https://golang.org/
-[license]: https://github.com/bosh-prometheus/ingestor_exporter/blob/master/LICENSE
+[license]: LICENSE.md
 [prometheus-boshrelease]: https://github.com/bosh-prometheus/prometheus-boshrelease
