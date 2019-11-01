@@ -24,7 +24,9 @@ meta:
     tag: (( grab meta.go.version ))
 
   github:
-    uri:          (( concat "git@" meta.github.hostname ":" meta.github.owner "/" meta.github.repo ))
+    uri:          (( concat "https://" meta.github.hostname "/" meta.github.owner "/" meta.github.repo ))
+    username:     (( vault "secret/" meta.github.hostname "/" meta.github.owner "/" meta.github.repo "/user:username" ))
+    password:     (( vault "secret/" meta.github.hostname "/" meta.github.owner "/" meta.github.repo "/user:password" ))
     hostname:     github.com
     owner:        (( param "Please specify the name of the user / organization that owns the Github repository" ))
     repo:         (( param "Please specify the name of the Github repository" ))
@@ -308,14 +310,14 @@ resource_types:
       repository: (( vault "secret/" meta.github.hostname "/" meta.github.owner "/" meta.github.repo "/docker/pull-request:registry-url" ))
 
 resources:
+
   - name: git
     type: git
     source:
-      uri:         (( grab meta.github.uri ))
-      branch:      (( grab meta.github.branch ))
-      private_key: (( grab meta.github.private_key ))
-      ignore_paths:
-      - ci/versions
+      uri: (( grab meta.github.uri ))
+      username: (( grab meta.github.username ))
+      password: (( grab meta.github.password ))
+      private_key: ~
 
   - name: version
     type: semver
