@@ -25,6 +25,7 @@ const (
 	namespace = "ingestor"
 )
 
+
 type ingestorResponse struct {
 	Consume                *float64 `json:"consume"`
 	ConsumePerSecond       *float64 `json:"consume_per_sec"`
