@@ -1,5 +1,5 @@
 ---
-name: ingestor-exporter
+name: ingestor-exporter-oss
 
 meta:
   concourse:
