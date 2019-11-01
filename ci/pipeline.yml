@@ -326,9 +326,10 @@ resources:
       uri: (( grab meta.github.uri ))
       file: (( concat "ci/versions/" meta.go.binary "-version" ))
       initial_version: 0.0.1
-      private_key: (( grab meta.github.private_key ))
       branch: (( grab meta.github.branch ))
-      git_user: "CI Bot <ci@localhost>"
+      git_user: "ingestor-exporter-ci-bot <ingestor-exporter-ci-bot@gmail.com>"
+      username: (( grab meta.github.username ))
+      password: (( grab meta.github.password ))
 
   - name: notify
     type: teams-notification
